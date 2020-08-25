@@ -1,5 +1,5 @@
 {
-  "name": "isj-postal-matcher",
+  "name": "@geolonia/japanese-addresses",
   "version": "1.0.0",
   "description": "",
   "main": "./bin/build.js",
