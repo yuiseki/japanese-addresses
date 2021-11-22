@@ -8,12 +8,14 @@ const url = require('url')
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const reafFileStream = fs.createReadStream(path.resolve(__dirname, '..', 'data', 'latest.csv'))
+const csvResultFd = fs.openSync(path.resolve(__dirname, '..', 'data', 'banchi-go.csv'), 'a')
 const cityCodeMap = new Map()
 
 readline
   .createInterface({ input: reafFileStream })
   .on('line', (line) => {
-    const [,quotedPrefName,,,quotedCityCode, quotedCityName] = line.split(',')
+    const [quotedPrefCode, quotedPrefName,,,quotedCityCode, quotedCityName] = line.split(',')
+    const prefCode = quotedPrefCode.replace(/"/g, '')
     const prefName = quotedPrefName.replace(/"/g, '')
     const cityCode = quotedCityCode.replace(/"/g, '')
     const cityName = quotedCityName.replace(/"/g, '')
@@ -41,7 +43,13 @@ readline
         while (cyomokuURLs.length > 0) {
           const cyomokuURL = cyomokuURLs.shift()
           console.log(cyomokuURL)
-          const resp = await fetch(cyomokuURL)
+          let resp
+          try {
+            resp = await fetch(cyomokuURL)
+          } catch (error) {
+            cityCodeMap.set(cityCode, { prefName, cityName, status: JSON.stringify(error) })
+            continue
+          }
           const { window } = new JSDOM(await resp.text())
           const table = window.document.getElementsByTagName('table')[0]
           const [header, ...rows] = table.querySelectorAll('tr')
@@ -58,6 +66,8 @@ readline
               prev[headerTexts[index]] = value
               return prev
             }, {}))
+            const csvLine = values.join(',')
+            fs.writeFileSync(csvResultFd, csvLine + '\n')
           }
           await sleep(500)
         }
@@ -81,5 +91,6 @@ readline
       await sleep(1000)
     }
 
+    fs.closeSync(csvResultFd)
     fs.writeFileSync(path.resolve(__dirname, 'result.json'), JSON.stringify(Object.fromEntries(cityCodeMap)))
   })
