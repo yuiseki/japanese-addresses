@@ -18,16 +18,7 @@ readline
     const cityCode = quotedCityCode.replace(/"/g, '')
     const cityName = quotedCityName.replace(/"/g, '')
     if(!cityCodeMap.has(cityCode)) {
-      if(
-        // cityCode === '01452' ||
-        // cityCode === '01455' ||
-        // cityCode === '25207' ||
-        cityCode === '44203' ||
-        cityCode === '47325'
-
-      ) { // TODO: debug
-        cityCodeMap.set(cityCode, { prefName, cityName })
-      }
+      cityCodeMap.set(cityCode, { prefName, cityName })
     }
   } )
   .on('close',async () => {
