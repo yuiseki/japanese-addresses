@@ -9,6 +9,12 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const reafFileStream = fs.createReadStream(path.resolve(__dirname, '..', 'data', 'latest.csv'))
 const csvResultFd = fs.openSync(path.resolve(__dirname, '..', 'data', 'banchi-go.csv'), 'a')
+const logFd = fs.openSync(path.resolve(__dirname, '..', 'banchi-go.log'), 'a')
+const log = (message) => {
+  const now = new Date().toISOString()
+  fs.writeFileSync(logFd, `[${now}] ${message}`)
+}
+
 const cityCodeMap = new Map()
 
 readline
@@ -26,10 +32,19 @@ readline
   .on('close',async () => {
     const urlFormat = 'https://saigai.gsi.go.jp/jusho/view/pref/city/%code.html'
 
-    for (const [cityCode, { prefName, cityName }] of cityCodeMap) {
-      const cityUrl = urlFormat.replace('%code', cityCode)
-      console.log(cityUrl)
-      const resp = await fetch(cityUrl)
+    for (const [cityCode] of cityCodeMap) {
+      const cityURL = urlFormat.replace('%code', cityCode)
+      let resp
+      try {
+        resp = await fetch(cityURL)
+        if(resp.status > 399) {
+          throw new Error(`Request failed with ${resp.status}`)
+        }
+      } catch (error) {
+        log(`Request to ${cityURL} failed with ${JSON.stringify(error)}`)
+        continue
+      }
+      log(`Request to ${cityURL} succeeded.`)
 
       if (resp.status === 200) {
         const { window } = new JSDOM(await resp.text())
@@ -37,19 +52,23 @@ readline
         const cyomokuURLs = [...anchors]
           .map(anchor => anchor.getAttribute('href'))
           .filter(link => link.match(new RegExp(`data/${cityCode}/${cityCode}_[0-9]+\.html`)))
-          .map(relativeURL => url.resolve(cityUrl, relativeURL))
+          .map(relativeURL => url.resolve(cityURL, relativeURL))
 
         const banchigoItemsMap = {}
         while (cyomokuURLs.length > 0) {
           const cyomokuURL = cyomokuURLs.shift()
-          console.log(cyomokuURL)
           let resp
           try {
             resp = await fetch(cyomokuURL)
+            if(resp.status > 399) {
+              throw new Error(`Request failed with ${resp.status}`)
+            }
           } catch (error) {
-            cityCodeMap.set(cityCode, { prefName, cityName, status: JSON.stringify(error) })
+            log(`Request to ${cyomokuURL} failed with ${JSON.stringify(error)}`)
             continue
           }
+          log(`Request to ${cyomokuURL} succeeded.`)
+
           const { window } = new JSDOM(await resp.text())
           const table = window.document.getElementsByTagName('table')[0]
           const [header, ...rows] = table.querySelectorAll('tr')
@@ -69,28 +88,12 @@ readline
             const csvLine = values.join(',')
             fs.writeFileSync(csvResultFd, csvLine + '\n')
           }
-          await sleep(500)
-        }
-
-        const cityDirName = path.resolve(__dirname, '..', 'api', 'ja', prefName, cityName)
-        fs.mkdirSync(cityDirName, { recursive: true })
-
-        const cyomokuNames = Object.keys(banchigoItemsMap)
-        for (const cyomokuName of cyomokuNames) {
-          const banchigoFilename = path.resolve(cityDirName, cyomokuName + '.json')
-          const data = banchigoItemsMap[cyomokuName].map(item => ({
-            gaiku: item['街区符号'],
-            kiso: item['基礎番号'],
-            lat: item['緯度(度単位10進数)'],
-            lng: item['経度(度単位10進数)'],
-          }))
-          fs.writeFileSync(banchigoFilename, JSON.stringify(data))
+          await sleep(300)
         }
       }
-      cityCodeMap.set(cityCode, { prefName, cityName, status: resp.status })
       await sleep(1000)
     }
 
     fs.closeSync(csvResultFd)
-    fs.writeFileSync(path.resolve(__dirname, 'result.json'), JSON.stringify(Object.fromEntries(cityCodeMap)))
+    fs.closeSync(logFd)
   })
