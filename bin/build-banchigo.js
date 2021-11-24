@@ -8,12 +8,13 @@ const url = require('url')
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const reafFileStream = fs.createReadStream(path.resolve(__dirname, '..', 'data', 'latest.csv'))
-const csvResultFd = fs.openSync(path.resolve(__dirname, '..', 'data', 'banchi-go.csv'), 'a')
-const logFd = fs.openSync(path.resolve(__dirname, '..', 'banchi-go.log'), 'a')
+const csvResultFd = fs.openSync(path.resolve(__dirname, '..', 'data', 'banchi-go.csv'), 'w')
+const logFd = fs.openSync(path.resolve(__dirname, '..', 'banchi-go.log'), 'w')
 const log = (message) => {
   const now = new Date().toISOString()
-  fs.writeFileSync(logFd, `[${now}] ${message}`)
+  fs.writeFileSync(logFd, `[${now}] ${message}\n`)
 }
+let hasHeader = false
 
 const cityCodeMap = new Map()
 
@@ -73,6 +74,11 @@ readline
           const table = window.document.getElementsByTagName('table')[0]
           const [header, ...rows] = table.querySelectorAll('tr')
           const headerTexts = [...header.querySelectorAll('th')].map(th => th.textContent)
+
+          if(!hasHeader) {
+            fs.writeFileSync(csvResultFd, headerTexts.join(',') + '\n')
+            hasHeader = true
+          }
 
           for (const row of rows) {
             const cols = [...row.querySelectorAll('td')]
